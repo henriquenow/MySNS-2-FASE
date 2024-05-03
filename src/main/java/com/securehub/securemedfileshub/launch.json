@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Launch MySNSServer",
+            "request": "launch",
+            "mainClass": "com.securehub.securemedfileshub.MySNSServer",
+            "projectName": "SecureMedFilesHub",
+            "args": "23456"
+        }
+    ]
+}
