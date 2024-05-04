@@ -33,17 +33,15 @@ public class MySNS {
         for (int i = 0; i < args.length; i++) {
             System.out.println(i + ": " + args[i]);
         }
-
+      
         if (args.length < 5) {
             printUsage();
             return;
         }
 
      
-        UserManager userManager = new UserManager();
-    
-        String serverAddress = args[0].split(":")[0];
-        int serverPort = Integer.parseInt(args[0].split(":")[1]);
+        String serverAddress = args[1].split(":")[0];
+        int serverPort = Integer.parseInt(args[1].split(":")[1]);
         String command = null;
         String username = null;
         String password = null;
@@ -51,23 +49,16 @@ public class MySNS {
         String doctorUsername = null;
         String patientUsername = null;
 
-        if(args.length==5){ //-au
-            command = args[1];
+        if(args.length==6){ //-au
+            command = args[2];
         }else {
             if (args[6].equals("-g")) {
-                command = args[5];
+                command = args[6];
             } else {
-            command = args[7];
+            command = args[8];
         }
         }
-    
-    
-        System.setProperty("javax.net.ssl.trustStore", "truststore.client");
-        System.setProperty("javax.net.ssl.trustStorePassword", "server");
-    
-        System.out.println("Truststore path: truststore.client");
-        System.out.println("Truststore password: server");
-    
+
         SSLSocketFactory sf = (SSLSocketFactory) SSLSocketFactory.getDefault();
         SSLSocket socket = null;
         try {
@@ -75,23 +66,44 @@ public class MySNS {
             socket = (SSLSocket) sf.createSocket(serverAddress, serverPort);
             System.out.println("Connected to server.");
     
-            // Verify the server's identity
-            SSLSession session = socket.getSession();
-            X509Certificate cert = (X509Certificate) session.getPeerCertificates()[0];
-            String subject = cert.getSubjectX500Principal().getName();
-            String issuer = cert.getIssuerX500Principal().getName();
-    
-            System.out.println("Server Subject: " + subject);
-            System.out.println("Server Issuer: " + issuer);
-    
-            // The hostname should be this CN=Server Oficial,OU=SecureFilesHub,O=SecureFilesHub,L=Lisboa,ST=Lisboa,C=PT
-            String hostname = "Server Oficial";
-            String cn = extractCN(subject);
-            if (!hostname.equals(cn)) {
-                throw new Exception("Server hostname does not match the certificate CN");
+         // Verify the server's identity
+            try {
+            	 System.out.println("About to socket.getSession()...");
+                SSLSession session = socket.getSession();
+                System.out.println("SSL Session: " + session);
+                System.out.println("SSL Protocol: " + session.getProtocol());
+                System.out.println("SSL Cipher Suite: " + session.getCipherSuite());
+
+                X509Certificate[] peerCerts = (X509Certificate[]) session.getPeerCertificates();
+                System.out.println("Peer Certificates Length: " + peerCerts.length);
+
+                if (peerCerts.length > 0) {
+                    X509Certificate cert = peerCerts[0];
+                    String subject = cert.getSubjectX500Principal().getName();
+                    String issuer = cert.getIssuerX500Principal().getName();
+
+                    System.out.println("Server Subject: " + subject);
+                    System.out.println("Server Issuer: " + issuer);
+
+                    // The hostname should be this CN=Server Oficial,OU=SecureFilesHub,O=SecureFilesHub,L=Lisboa,ST=Lisboa,C=PT
+                    String hostname = "Server Oficial";
+                    String cn = extractCN(subject);
+                    if (!hostname.equals(cn)) {
+                        throw new Exception("Server hostname does not match the certificate CN");
+                    }
+
+                    System.out.println("Server identity verified.");
+                } else {
+                    throw new Exception("No peer certificates found.");
+                }
+            } catch (Exception e) {
+                System.err.println("Error verifying server identity: " + e.getMessage());
+                e.printStackTrace();
+                System.exit(1);
             }
     
-            System.out.println("Server identity verified.");
+
+
     
             switch (command) {
                 case "-au":
@@ -198,7 +210,7 @@ public class MySNS {
                         break;
                     case "-au":
                         System.out.println("Creating user: " + username);
-                        createUser(dos, dis, username, password, certificateFile,userManager);
+                        createUser(dos, dis, username, password, certificateFile);
                         return;
                     default:
                         System.err.println("Unknown command: " + command);
@@ -356,7 +368,7 @@ public class MySNS {
     }
 
     private static void createUser(DataOutputStream dos, DataInputStream dis, String username, String password,
-    String certificateFile, UserManager userManager) {
+    String certificateFile) {
 try {
 // Generate a random salt for password hashing
 SecureRandom random = new SecureRandom();
