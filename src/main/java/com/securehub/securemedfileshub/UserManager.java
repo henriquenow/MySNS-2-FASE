@@ -84,11 +84,11 @@ public class UserManager {
         String saltString = Base64.getEncoder().encodeToString(salt);
         System.out.println("test 1");
         String hashedPasswordString = Base64.getEncoder().encodeToString(hashedPassword);
-        System.out.println("test 2");
+      
         User user = new User(username, saltString, hashedPasswordString);
-        System.out.println("test 3");
+  
         users.put(username, user);
-        System.out.println("test 4");
+
         
         System.out.println("Saving user in the file: " + username);
         saveUser(user);
