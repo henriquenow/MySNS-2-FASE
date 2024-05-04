@@ -50,9 +50,7 @@ public class UserManager {
                         answer = scanner.nextLine().trim().toLowerCase();
                     }
                     if (answer.equals("yes") || answer.equals("y")) {
-                        System.out.print("Enter the admin password: ");
-                        String adminPassword = scanner.nextLine();
-                        updateAdminMac(adminPassword);
+                        updateAdminMac();
                         System.out.println("MAC calculated and stored successfully.");
                     } else {
                         System.out.println("Exiting the server.");
@@ -77,20 +75,26 @@ public class UserManager {
     }
 
     public void createUser(String username, byte[] salt, byte[] hashedPassword, Path certificateFile) throws IOException {
-        System.out.println("Maybe Creating user: " + username);
+        System.out.println("Maybeee Creating user: " + username);
         if (users.containsKey(username)) {
             throw new IllegalArgumentException("User already exists: " + username);
         }
         System.out.println("User doesn't exist! Creating user: " + username);
-
+     
         String saltString = Base64.getEncoder().encodeToString(salt);
+        System.out.println("test 1");
         String hashedPasswordString = Base64.getEncoder().encodeToString(hashedPassword);
-
+        System.out.println("test 2");
         User user = new User(username, saltString, hashedPasswordString);
+        System.out.println("test 3");
         users.put(username, user);
-
+        System.out.println("test 4");
+        
+        System.out.println("Saving user in the file: " + username);
         saveUser(user);
         saveCertificate(username, certificateFile);
+        System.out.println("User Created!");
+        updateAdminMac();
     }
 
     public boolean userExists(String username) {
@@ -129,7 +133,7 @@ public class UserManager {
 
     private void createAdminUser() {
         try (Scanner scanner = new Scanner(System.in)) {
-            System.out.print("Enter password for the 'admin' user: ");
+            System.out.print("Enter (new) password for the 'admin' user: ");
             String adminPassword = scanner.nextLine();
 
             String salt = generateSalt();
@@ -177,19 +181,15 @@ public class UserManager {
         return storedMac.equals(currentMac);
     }
 
-    void updateAdminMac(String adminPassword) throws IOException {
+    void updateAdminMac() throws IOException {
         User adminUser = users.get("admin");
         if (adminUser == null) {
             throw new RuntimeException("Admin user not found.");
         }
 
-        String hashedPassword = hashPassword(adminPassword, adminUser.getSalt());
-        if (!hashedPassword.equals(adminUser.getHashedPassword())) {
-            throw new IllegalArgumentException("Invalid admin password.");
-        }
-
         String currentMac = calculateUsersMac();
         Files.write(Paths.get(MAC_FILE), currentMac.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+        System.out.println("admin.mac Updated! " );
     }
 
     private String calculateUsersMac() throws IOException {
