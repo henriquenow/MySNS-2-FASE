@@ -25,6 +25,7 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.Enumeration;
 import java.util.Arrays;
+import java.util.Base64;
 
 public class MySNS {
     public static void main(String[] args) {
@@ -241,49 +242,44 @@ public class MySNS {
 
     private static boolean authenticateUser(DataOutputStream dos, DataInputStream dis, String username, String password) {
         try {
-            // Send the username to the server for authentication
-
             dos.writeUTF(username);
             dos.flush();
-    
-            // Receive the salt from the server
+
             int saltLength = dis.readInt();
             if (saltLength == -1) {
-                // User not found
                 System.err.println("USER NOT FOUND!");
                 return false;
             }
+
             byte[] salt = new byte[saltLength];
             dis.readFully(salt);
-    
-            // Hash the password with the received salt using PBKDF2
-            KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 10000, 256);
-            SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
-            byte[] hashedPassword = factory.generateSecret(spec).getEncoded();
-    
-            // Send the hashed password to the server for verification
-            dos.writeInt(hashedPassword.length);
-            dos.write(hashedPassword);
-            dos.flush();
-    
-            // Receive the authentication result from the server
-            boolean authResult = dis.readBoolean();
+            String receivedSalt = Base64.getEncoder().encodeToString(salt);
+            System.out.println("Received salt: " + receivedSalt);
 
-            if (authResult) {
-                System.out.println("Authentication successful.");
-            } else {
-                System.err.println("WRONG PASSWORD! Authentication failed.");
-            }
+        // Hash the password with the received salt
+        KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 10000, 256);
+        SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+        byte[] hashedPassword = factory.generateSecret(spec).getEncoded();
+        System.out.println("Hashing password: " + password + " with salt: " + receivedSalt + " results in hashed password: " + Base64.getEncoder().encodeToString(hashedPassword));
 
+        // Send the hashed password to the server for verification
+        dos.writeInt(hashedPassword.length);
+        dos.write(hashedPassword);
+        dos.flush();
 
-            return authResult ;
-        } catch (Exception e) {
-            System.err.println("Error during authentication: " + e.getMessage());
-            return false;
-        }
+        // Receive the authentication result from the server
+        boolean authResult = dis.readBoolean();
+        System.out.println("Authentication result: " + authResult);
+
+        return authResult;
+    } catch (Exception e) {
+        System.err.println("Error during authentication: " + e.getMessage());
+        return false;
     }
+}
 
-    
+// Modify createUser in similar manner to log the generated salt and hashed password
+
     private static void processFiles(String[] args, String command, String doctorUsername, String patientUsername,
                                  DataOutputStream dos, DataInputStream dis,
                                  int nOfFilesSent, int nOfFilesAlreadyPresent, int nOfFilesMissing) throws Exception {
@@ -374,6 +370,7 @@ try {
 SecureRandom random = new SecureRandom();
 byte[] salt = new byte[16];
 random.nextBytes(salt);
+
 
 // Hash the password with the salt using PBKDF2
 KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 10000, 256);

@@ -78,34 +78,35 @@ public class MySNSServer {
     private static boolean handleAuthentication(DataInputStream dis, DataOutputStream dos, UserManager userManager) {
         try {
             String username = dis.readUTF();
-            System.out.println("Received username: " + username);
             User user = userManager.getUser(username);
 
-    
             if (user != null) {
-                System.out.println("User found: " + user.getUsername() + ". Sending salt to client.");
-                // User found, send the salt to the client
-                String salt = user.getSalt();
-                dos.writeInt(salt.length());
-                dos.write(salt.getBytes());
+                byte[] salt = Base64.getDecoder().decode(user.getSalt()); // Ensure it decodes correctly
+                dos.writeInt(salt.length);
+                dos.write(salt);
                 dos.flush();
-    
-                // Receive the hashed password from the client
+                System.out.println("User found: " + username + ". Salt sent to client: " + user.getSalt());
+
                 int hashedPasswordLength = dis.readInt();
                 byte[] receivedHashedPassword = new byte[hashedPasswordLength];
                 dis.readFully(receivedHashedPassword);
-    
-                // Compare the received hashed password with the stored hashed password
+                String receivedHashedPasswordString = Base64.getEncoder().encodeToString(receivedHashedPassword);
                 String storedHashedPassword = user.getHashedPassword();
-                if (Arrays.equals(receivedHashedPassword, Base64.getDecoder().decode(storedHashedPassword))) {
+                
+                System.out.println("Received hashed password from client: " + receivedHashedPasswordString);
+                System.out.println("Authentication - Stored hashed password: " + storedHashedPassword);
+                System.out.println("Authentication - Received hashed password: " + receivedHashedPasswordString);
+
+                if (storedHashedPassword.equals(receivedHashedPasswordString)) {
                     dos.writeBoolean(true);
+                    System.out.println("Authentication successful for user: " + username);
                     return true;
                 } else {
                     dos.writeBoolean(false);
+                    System.out.println("Authentication failed for user: " + username);
                     return false;
                 }
             } else {
-                // User not found
                 dos.writeInt(-1);
             }
             dos.flush();
@@ -115,7 +116,6 @@ public class MySNSServer {
             return false;
         }
     }
-
    
     private static void processClient(Socket clientSocket) throws IOException {
         DataInputStream dis = new DataInputStream(clientSocket.getInputStream());

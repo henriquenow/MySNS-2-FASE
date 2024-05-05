@@ -16,6 +16,7 @@ import java.security.spec.KeySpec;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Scanner;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
@@ -31,6 +32,7 @@ public class UserManager {
         setup();
     }
 
+
     public boolean setup() {
         try {
             Path usersFilePath = Paths.get(USERS_FILE);
@@ -39,34 +41,19 @@ public class UserManager {
             }
             loadUsers();
 
+            // Ensure we only ask to create the MAC file once
             if (!macFileExists()) {
-                System.out.println("MAC file doesn't exist!");
-                try (Scanner scanner = new Scanner(System.in)) {
-                    System.out.print("Do you want to calculate the MAC for the users file? (yes/no): ");
-                    String answer = scanner.nextLine().trim().toLowerCase();
-                  
-                    while (!answer.equals("yes") && !answer.equals("no") && !answer.equals("y") && !answer.equals("n")) {
-                        System.out.print("Invalid answer. Do you want to calculate the MAC for the users file? (yes/no): ");
-                        answer = scanner.nextLine().trim().toLowerCase();
-                    }
-                    if (answer.equals("yes") || answer.equals("y")) {
-                        updateAdminMac();
-                        System.out.println("MAC calculated and stored successfully.");
-                    } else {
-                        System.out.println("Exiting the server.");
-                        return false;
-                    }
+                if (!promptForMacCreation()) {
+                    return false;
                 }
             }
 
+            // Verify MAC after ensuring it exists
             if (!verifyUsersMac()) {
-                System.out.println("FILE MIGHT BEEN TAMPERED WITH! Exiting the server: MAC verification failed. ");
+                System.out.println("FILE MIGHT BEEN TAMPERED WITH! Exiting the server: MAC verification failed.");
                 return false;
             }
 
-           
-
-          
             return true;
         } catch (IOException e) {
             System.out.println("Error setting up the server: " + e.getMessage());
@@ -74,29 +61,60 @@ public class UserManager {
         }
     }
 
+    private boolean promptForMacCreation() {
+        System.out.println("MAC file doesn't exist!");
+        try (Scanner scanner = new Scanner(System.in)) {
+            String answer;
+            do {
+                System.out.print("Do you want to calculate the MAC for the users file? (yes/no): ");
+                answer = scanner.nextLine().trim().toLowerCase();
+                if (!answer.equals("yes") && !answer.equals("no") && !answer.equals("y") && !answer.equals("n")) {
+                    System.out.println("Invalid input. Please enter 'yes', 'no', 'y', or 'n'.");
+                }
+            } while (!answer.equals("yes") && !answer.equals("no") && !answer.equals("y") && !answer.equals("n"));
+
+            if (answer.equals("yes") || answer.equals("y")) {
+                System.out.print("Enter the admin password: ");
+                String adminPassword = scanner.nextLine();
+                try {
+					updateAdminMac(adminPassword);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+                System.out.println("MAC calculated and stored successfully.");
+                return true;
+            } else {
+                System.out.println("MAC calculation skipped. Exiting the server.");
+                return false;
+            }
+        } catch (NoSuchElementException e) {
+            System.err.println("No input available. Please run the program in a console that supports input.");
+            return false;
+        }
+    }
+
+
+
     public void createUser(String username, byte[] salt, byte[] hashedPassword, Path certificateFile) throws IOException {
-        System.out.println("Maybeee Creating user: " + username);
+        String saltString = Base64.getEncoder().encodeToString(salt);
+        String hashedPasswordString = Base64.getEncoder().encodeToString(hashedPassword);
+        System.out.println("Creating user: " + username);
+        System.out.println("Generated salt: " + saltString);
+        System.out.println("Generated hashed password: " + hashedPasswordString);
+
+   
         if (users.containsKey(username)) {
             throw new IllegalArgumentException("User already exists: " + username);
         }
-        System.out.println("User doesn't exist! Creating user: " + username);
-     
-        String saltString = Base64.getEncoder().encodeToString(salt);
-        System.out.println("test 1");
-        String hashedPasswordString = Base64.getEncoder().encodeToString(hashedPassword);
-      
+
         User user = new User(username, saltString, hashedPasswordString);
-  
         users.put(username, user);
 
-        
-        System.out.println("Saving user in the file: " + username);
         saveUser(user);
         saveCertificate(username, certificateFile);
-        System.out.println("User Created!");
+        System.out.println("User created: " + username);
         updateAdminMac();
     }
-
     public boolean userExists(String username) {
         return users.containsKey(username);
     }
@@ -133,7 +151,7 @@ public class UserManager {
 
     private void createAdminUser() {
         try (Scanner scanner = new Scanner(System.in)) {
-            System.out.print("Enter (new) password for the 'admin' user: ");
+            System.out.print("Enter the (new) password for the 'admin' user: ");
             String adminPassword = scanner.nextLine();
 
             String salt = generateSalt();
@@ -157,6 +175,9 @@ public class UserManager {
         }
         String userLine = user.toString() + System.lineSeparator();
         Files.write(usersFilePath, userLine.getBytes(), StandardOpenOption.APPEND);
+        System.out.println("User stored: " + user.getUsername());
+        System.out.println("Stored user details - Salt: " + user.getSalt());
+        System.out.println("Stored user details - Hashed password: " + user.getHashedPassword());
     }
 
     private void saveCertificate(String username, Path certificateFile) throws IOException {
@@ -181,7 +202,23 @@ public class UserManager {
         return storedMac.equals(currentMac);
     }
 
-    void updateAdminMac() throws IOException {
+    void updateAdminMac(String adminPassword) throws IOException {
+        User adminUser = users.get("admin");
+        if (adminUser == null) {
+            throw new RuntimeException("Admin user not found.");
+        }
+
+        String hashedPassword = hashPassword(adminPassword, adminUser.getSalt());
+        if (!hashedPassword.equals(adminUser.getHashedPassword())) {
+            throw new IllegalArgumentException("Invalid admin password.");
+        }
+
+        String currentMac = calculateUsersMac();
+        Files.write(Paths.get(MAC_FILE), currentMac.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+        System.out.println("admin.mac Updated!");
+    }
+
+    private void updateAdminMac() throws IOException {
         User adminUser = users.get("admin");
         if (adminUser == null) {
             throw new RuntimeException("Admin user not found.");
@@ -189,8 +226,9 @@ public class UserManager {
 
         String currentMac = calculateUsersMac();
         Files.write(Paths.get(MAC_FILE), currentMac.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-        System.out.println("admin.mac Updated! " );
+        System.out.println("admin.mac Updated!");
     }
+
 
     private String calculateUsersMac() throws IOException {
         try {
